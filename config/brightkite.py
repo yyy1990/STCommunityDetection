@@ -1,4 +1,6 @@
 import os
+import torch
+
 result_path = './results/brightkite/'
 folder = os.path.exists(result_path)
 if not folder:
@@ -28,3 +30,19 @@ topn = 50
 node_path = result_path+'Brightkite_node_list.pkl'
 temporal_path = result_path+'Brightkite_temporal_edge.pkl'
 spatial_path = result_path+'Brightkite_spatial_edge.pkl'
+
+#train
+batch_size = 256
+input_dim = 640
+output_dim_head = 24
+heads = 4
+dropout = 0.1
+gpu_id = 0
+device = torch.device(f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu")
+lr = 0.001
+label_smoothing = 0.05
+epoch_num = 20
+check_point_interval = 1
+
+#evaluate
+label_edge = './dataset/brightkite/Brightkite_edges.txt'

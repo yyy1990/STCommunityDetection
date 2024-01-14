@@ -1,9 +1,9 @@
 import torch
 from ggt import GGT_layer
 
-class GraphTransformer(torch.nn.Module):
+class GGT_net(torch.nn.Module):
     def __init__(self, input_dim, output_dim, heads, dropout, device):
-        super(GraphTransformer, self).__init__()
+        super(GGT_net, self).__init__()
         self.layer1 = GGT_layer(in_channels=input_dim, out_channels=output_dim, edge_dim=1, heads=heads, dropout=dropout, beta=True, device=device)
         self.layer2to8 = GGT_layer(in_channels=output_dim*heads, out_channels=output_dim, edge_dim=1, heads=heads, dropout=dropout, beta=True, device=device)
 

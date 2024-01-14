@@ -1,9 +1,15 @@
+import time
 import torch
+import gensim
+import joblib
 import numpy as np
 import pandas as pd
 from collections import Counter
+from tqdm import tqdm
 from torch.utils.data import Dataset
 from augmented_trajectory import random_aug_walk
+from net import GGT_net
+from torch.utils.tensorboard import SummaryWriter
 
 
 class index_dataset(Dataset):
@@ -25,7 +31,7 @@ class index_dataset(Dataset):
         
 
 class graph_dataset(Dataset):
-    def __init__(self, check_in, placeid_model, spatial_model, spatial_edge, temporal_edge, train=False, select_label=64, spatial_add_prob=0.5,
+    def __init__(self, check_in, placeid_model, spatial_model, spatial_edge, temporal_edge, train=False, select_label=0.2, spatial_add_prob=0.5,
     add_prob=0.5, min_len=5, max_len=4096, aug_num=20, topn=3, embedding_selector='both', user_embedding_init='both'):
         self.check_in_group = check_in.groupby('userid')
         self.placeid_model = placeid_model
@@ -176,10 +182,17 @@ class graph_dataset(Dataset):
             return node_embedding, edge_index, edge_attr
 
 
-def train(check_in,batch_size,place_id_embedding_model,spatial_embedding_model,spatial_edge,temporal_edge):
+def train(check_in,batch_size,place_id_embedding_model,spatial_embedding_model,spatial_edge,temporal_edge, input_dim, output_dim, heads, dropout, 
+          device, lr, label_smoothing, save_prefix, epoch_num, check_point_interval):
+    check_in = pd.read_csv(check_in)
+    place_id_embedding_model = gensim.models.Word2Vec.load(place_id_embedding_model)
+    spatial_embedding_model = gensim.models.Word2Vec.load(spatial_embedding_model)
+    spatial_edge = joblib.load(spatial_edge)
+    temporal_edge = joblib.load(temporal_edge)
+
     idx_set = index_dataset(check_in, train=True)
     train_dataloader = torch.utils.data.DataLoader(dataset=idx_set, batch_size=batch_size, shuffle=True, num_workers=8)
-    g_set = graph_dataset(check_in, place_id_embedding_model, spatial_embedding_model, spatial_edge, temporal_edge, train=True, select_label=64, aug_num=10,
+    g_set = graph_dataset(check_in, place_id_embedding_model, spatial_embedding_model, spatial_edge, temporal_edge, train=True, select_label=0.2, aug_num=10,
     spatial_add_prob=0.5, topn=3)
 
     if torch.cuda.is_available():
@@ -189,13 +202,9 @@ def train(check_in,batch_size,place_id_embedding_model,spatial_embedding_model,s
         use_gpu = False
         print('training on CPU mode')
 
-    net = GraphTransformer(input_dim, output_dim)
+    net = GGT_net(input_dim, output_dim, heads, dropout, device)
     print('model structure:')
     print(net)
-
-    parameter_number = get_parameter_number(net)
-    print(f'Total number of parameters: {parameter_number["Total"]}')
-    print(f'Total number of trainable parameters: {parameter_number["Trainable"]}')
 
     opt = torch.optim.Adam(net.parameters(), lr)
     cost = torch.nn.CrossEntropyLoss(label_smoothing=label_smoothing)
@@ -218,7 +227,6 @@ def train(check_in,batch_size,place_id_embedding_model,spatial_embedding_model,s
 
         for data in tqdm(train_dataloader):
             node_embedding, edge_index, edge_attr, target_user, target_place = g_set[data.tolist()]
-            #node_embedding, edge_index, edge_attr, target_user, target_place = g_set[data] #weeplaces
 
             node_embedding = torch.tensor(node_embedding)
             edge_index = torch.tensor(edge_index)
@@ -244,7 +252,7 @@ def train(check_in,batch_size,place_id_embedding_model,spatial_embedding_model,s
             target_user_output = x[target_user]
             target_place_output = x[target_place]
 
-            user_output = x[0:(len(data)*2)] #len(data)=# of user, # of user + # of aug user
+            user_output = x[0:(len(data)*2)]
             sim_user = torch.matmul(user_output, user_output.T)
             sim_user_diag = torch.diag(sim_user)
             sim_user_diag = torch.diag_embed(sim_user_diag)
