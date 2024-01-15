@@ -46,3 +46,4 @@ check_point_interval = 1
 
 #evaluate
 label_edge = './dataset/brightkite/Brightkite_edges.txt'
+evaluate_report = result_path+'evaluate_report.csv'
